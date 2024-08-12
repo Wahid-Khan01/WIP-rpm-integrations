@@ -1,0 +1,82 @@
+worker_processes auto;
+
+events {
+    worker_connections 512;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    client_max_body_size 100M;
+
+    # Redirect HTTP to HTTPS for the main server
+    server {
+        listen 80;
+        server_name onlyoffice.rapidpm.uk;
+
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # Redirect HTTP to HTTPS for the document server
+    server {
+        listen 8080;
+        server_name onlyoffice.rapidpm.uk;
+
+        location / {
+            return 301 https://$host:8443$request_uri;
+        }
+    }
+
+    # HTTPS server for the Python application
+    server {
+        listen 443 ssl;
+        server_name onlyoffice.rapidpm.uk;
+
+        # SSL configuration
+        ssl_certificate /etc/nginx/ssl/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        location / {
+            proxy_http_version 1.1;
+            proxy_pass http://example:80;
+            proxy_redirect off;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $http_host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+
+    # HTTPS server for the document server
+    server {
+        listen 8443 ssl;
+        server_name onlyoffice.rapidpm.uk;
+
+        # SSL configuration
+        ssl_certificate /etc/nginx/ssl/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        location / {
+            client_max_body_size 100m;
+            proxy_http_version 1.1;
+            proxy_pass http://document-server:8080;
+            proxy_redirect off;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $http_host;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+    }
+}
+

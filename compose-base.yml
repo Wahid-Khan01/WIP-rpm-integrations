@@ -1,0 +1,55 @@
+version: "3"
+
+services:
+  example:
+    container_name: example
+    build:
+      context: .
+    expose:
+      - "80"
+    environment:
+      - ADDRESS=0.0.0.0
+      - DOCUMENT_SERVER_PRIVATE_URL=http://document-server
+      - DOCUMENT_SERVER_PUBLIC_URL=https://onlyoffice.rapidpm.uk 
+      - EXAMPLE_URL=http://example
+      - JWT_SECRET=AbraKaDabra
+      - PORT=80
+
+  document-server:
+    container_name: document-server
+    image: onlyoffice/documentserver:7.3.3.50
+    expose:
+      - "80"
+    environment:
+      - JWT_SECRET=AbraKaDabra
+
+  proxy:
+    container_name: proxy
+    build:
+      context: .
+      target: proxy
+    depends_on:
+      - document-server
+      - example
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./proxy:/etc/nginx
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /tmp/acme-challenge:/tmp/acme-challenge
+    restart: always
+
+  letsencrypt:
+    container_name: certbot
+    image: certbot/certbot
+    command: sh -c "certbot certonly --webroot -w /tmp/acme-challenge/ -d onlyoffice.rapidpm.uk -d app.rapidpm.uk --expand --text --agree-tos --email test@mbaapoh.com --rsa-key-size 4096 --verbose --keep-until-expiring --preferred-challenges=http  --non-interactive"
+    entrypoint: ""
+    volumes:
+      - "/etc/letsencrypt:/etc/letsencrypt"
+      - "/tmp/acme-challenge:/tmp/acme-challenge"
+    environment:
+      - TERM=xterm
+
+
+
