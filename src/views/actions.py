@@ -530,7 +530,7 @@ def download(request):
             try:
                res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
                print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
-               download(request)
+               return download(request)
             except Exception as e:
                 logger.info(e)
 
@@ -540,7 +540,7 @@ def download(request):
                 cookies = login_res.cookies
                 res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
                 print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
-                download(request)
+                return download(request)
             except Exception as e:
                 logger.info(e)
                 response.setdefault('error', 'File not found')
