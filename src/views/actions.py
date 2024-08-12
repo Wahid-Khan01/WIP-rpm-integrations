@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 cookies=''
 login_url='https://rapidpm.uk/api/auth_process'
 upload_url='https://rapidpm.uk/api/update_artefact_file'
-download_url='https://rapidpm.uk/api/upload/artefact/<art_id>'
+download_url='https://rapidpm.uk/api/upload/artefact/'
 
 # upload a file from the document storage service to the document editing service
 @jwtManager.token_required
@@ -528,8 +528,7 @@ def download(request):
         global cookies
         if cookies:
             try:
-               download_url = f"download_url/{fileName.split('.')[0]}"
-               res = requests.get(download_url, cookies=cookies)
+               res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
                print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
                download(request)
             except Exception as e:
@@ -539,8 +538,7 @@ def download(request):
             try:
                 login_res = requests.post(login_url, data={'email': 'syetem_rpm@rpm.com', 'password': 'SystemRPM$123'})
                 cookies = login_res.cookies
-                download_url = f"download_url/{fileName.split('.')[0]}"
-                res = requests.get(download_url, cookies=cookies)
+                res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
                 print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
                 download(request)
             except Exception as e:
