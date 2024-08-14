@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 cookies=''
 login_url='https://rapidpm.uk/api/auth_process'
 upload_url='https://rapidpm.uk/api/update_artefact_file'
+download_url='https://rapidpm.uk/api/upload/artefact/'
 
 # upload a file from the document storage service to the document editing service
 @jwtManager.token_required
@@ -498,8 +499,8 @@ def assets(request):
 # download a file
 @jwtManager.token_required
 def download(request):
+    fileName = fileUtils.getFileName(request.GET['fileName'])  # get the file name
     try:
-        fileName = fileUtils.getFileName(request.GET['fileName'])  # get the file name
         userAddress = request.GET.get('userAddress')
         isEmbedded = request.GET.get('dmode')
 
@@ -524,7 +525,25 @@ def download(request):
         return response
     except Exception:
         response = {}
-        response.setdefault('error', 'File not found')
+        global cookies
+        if cookies:
+            try:
+               res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
+               print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
+               return download(request)
+            except Exception as e:
+                logger.info(e)
+
+        else:
+            try:
+                login_res = requests.post(login_url, data={'email': 'syetem_rpm@rpm.com', 'password': 'SystemRPM$123'})
+                cookies = login_res.cookies
+                res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
+                print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
+                return download(request)
+            except Exception as e:
+                logger.info(e)
+                response.setdefault('error', 'File not found')
         return HttpResponse(json.dumps(response), content_type='application/json')
 
 
