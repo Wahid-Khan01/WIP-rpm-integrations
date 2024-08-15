@@ -523,26 +523,29 @@ def download(request):
             filePath = docManager.getStoragePath(fileName, userAddress)  # get file from the storage directory
         response = docManager.download(filePath)  # download this file
         return response
-    except Exception:
+    except Exception as e:
+        print(f"Id {fileName.split('.')[0]} has error {e} ")
         response = {}
         global cookies
         if cookies:
             try:
                res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
-               print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
+               if not res:
+                   print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
                return download(request)
             except Exception as e:
-                logger.info(e)
+                print(f"Id {fileName.split('.')[0]} has error {e} ")
 
         else:
             try:
                 login_res = requests.post(login_url, data={'email': 'syetem_rpm@rpm.com', 'password': 'SystemRPM$123'})
                 cookies = login_res.cookies
                 res = requests.get(f"{download_url}/{fileName.split('.')[0]}", cookies=cookies)
-                print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
+                if not res:
+                    print(f"file is not found on only office server for id {fileName.split('.')[0]} ")
                 return download(request)
             except Exception as e:
-                logger.info(e)
+                print(f"Id {fileName.split('.')[0]} has error {e} ")
                 response.setdefault('error', 'File not found')
         return HttpResponse(json.dumps(response), content_type='application/json')
 
