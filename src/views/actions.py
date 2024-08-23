@@ -50,8 +50,8 @@ def upload(request):
     try:
         fileInfo = request.FILES['uploadedFile']
         # check if the file size exceeds the maximum size allowed (5242880)
-        if (fileInfo.size > config_manager.maximum_file_size()) | (fileInfo.size <= 0):
-            raise Exception('File size is incorrect')
+        # if (fileInfo.size > config_manager.maximum_file_size()) | (fileInfo.size <= 0):
+        #     raise Exception('File size is incorrect')
 
         curExt = fileUtils.getFileExt(fileInfo.name)
         if not docManager.isSupportedExt(curExt):  # check if the file extension is supported by the document manager
@@ -148,9 +148,9 @@ def saveAs(request):
         resp = requests.get(saveAsFileUrl, verify=config_manager.ssl_verify_peer_mode_enabled(), timeout=5)
 
         # check if the file size exceeds the maximum size allowed (5242880)
-        if (len(resp.content) > config_manager.maximum_file_size()) | (len(resp.content) <= 0):
-            response.setdefault('error', 'File size is incorrect')
-            raise Exception('File size is incorrect')
+        # if (len(resp.content) > config_manager.maximum_file_size()) | (len(resp.content) <= 0):
+        #     response.setdefault('error', 'File size is incorrect')
+        #     raise Exception('File size is incorrect')
 
         curExt = fileUtils.getFileExt(filename)
         if not docManager.isSupportedExt(curExt):  # check if the file extension is supported by the document manager
