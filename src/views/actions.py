@@ -192,220 +192,227 @@ def rename(request):
 
 # edit a file
 @jwtManager.token_required
-def edit(request):
-    filename = fileUtils.getFileName(request.GET['filename'])
-    payload=request.payload
-    isEnableDirectUrl = request.GET['directUrl'].lower() in ("true") if 'directUrl' in request.GET else False
+def edit(request, retry_count=0):
+    try:
+        retry_count = retry_count + 1
+        filename = fileUtils.getFileName(request.GET['filename'])
+        payload=request.payload
+        isEnableDirectUrl = request.GET['directUrl'].lower() in ("true") if 'directUrl' in request.GET else False
 
-    ext = fileUtils.getFileExt(filename)
+        ext = fileUtils.getFileExt(filename)
 
-    directUrl = docManager.getDownloadUrl(filename, request, False)
-    docKey = docManager.generateFileKey(filename, request)
-    fileType = fileUtils.getFileType(filename)
-    # user = users.getUserFromReq(request)  # get user
+        directUrl = docManager.getDownloadUrl(filename, request, False)
+        docKey = docManager.generateFileKey(filename, request)
+        fileType = fileUtils.getFileType(filename)
+        # user = users.getUserFromReq(request)  # get user
 
-    user = users.create_user(uid=payload.get('uid'), name=payload.get('name'), email=payload.get('email'), group=payload.get('group'), 
-    reviewGroups=payload.get('reviewGroups'), commentGroups=payload.get('commentGroups'), favorite=payload.get('favorite'), deniedPermissions=payload.get("deniedPermissions"), descriptions=payload.get('descriptions'), templates=payload.get('templates'), userInfoGroups=payload.get('userInfoGroups'), avatar=payload.get('avatar'))
+        user = users.create_user(uid=payload.get('uid'), name=payload.get('name'), email=payload.get('email'), group=payload.get('group'),
+        reviewGroups=payload.get('reviewGroups'), commentGroups=payload.get('commentGroups'), favorite=payload.get('favorite'), deniedPermissions=payload.get("deniedPermissions"), descriptions=payload.get('descriptions'), templates=payload.get('templates'), userInfoGroups=payload.get('userInfoGroups'), avatar=payload.get('avatar'))
 
-    # get the editor mode: view/edit/review/comment/fillForms/embedded (the default mode is edit)
-    edMode = request.GET.get('mode') if request.GET.get('mode') else 'edit'
-    canEdit = docManager.isCanEdit(ext)  # check if the file with this extension can be edited
+        # get the editor mode: view/edit/review/comment/fillForms/embedded (the default mode is edit)
+        edMode = request.GET.get('mode') if request.GET.get('mode') else 'edit'
+        canEdit = docManager.isCanEdit(ext)  # check if the file with this extension can be edited
 
-    if (((not canEdit) and edMode == 'edit') or edMode == 'fillForms') and docManager.isCanFillForms(ext):
-        edMode = 'fillForms'
-        canEdit = True
-    # if the Submit form button is displayed or hidden
-    submitForm = edMode == 'fillForms' and user.id == 'uid-1'
-    mode = 'edit' if canEdit & (edMode != 'view') else 'view'  # if the file can't be edited, the mode is view
+        if (((not canEdit) and edMode == 'edit') or edMode == 'fillForms') and docManager.isCanFillForms(ext):
+            edMode = 'fillForms'
+            canEdit = True
+        # if the Submit form button is displayed or hidden
+        submitForm = edMode == 'fillForms' and user.id == 'uid-1'
+        mode = 'edit' if canEdit & (edMode != 'view') else 'view'  # if the file can't be edited, the mode is view
 
-    types = ['desktop', 'mobile', 'embedded']
-    # get the editor type: embedded/mobile/desktop (the default type is desktop)
-    edType = request.GET.get('type') if request.GET.get('type') in types else 'desktop'
-    # get the editor language (the default language is English)
-    lang = request.COOKIES.get('ulang') if request.COOKIES.get('ulang') else 'en'
+        types = ['desktop', 'mobile', 'embedded']
+        # get the editor type: embedded/mobile/desktop (the default type is desktop)
+        edType = request.GET.get('type') if request.GET.get('type') in types else 'desktop'
+        # get the editor language (the default language is English)
+        lang = request.COOKIES.get('ulang') if request.COOKIES.get('ulang') else 'en'
 
-    storagePath = docManager.getStoragePath(filename, request)
-    meta = historyManager.getMeta(storagePath)  # get the document meta data
-    infObj = None
+        storagePath = docManager.getStoragePath(filename, request)
+        meta = historyManager.getMeta(storagePath)  # get the document meta data
+        infObj = None
 
-    actionData = request.GET.get('actionLink')  # get the action data that will be scrolled to (comment or bookmark)
-    actionLink = json.loads(actionData) if actionData else None
+        actionData = request.GET.get('actionLink')  # get the action data that will be scrolled to (comment or bookmark)
+        actionLink = json.loads(actionData) if actionData else None
 
-    # templates image url in the "From Template" section
-    templatesImageUrl = docManager.getTemplateImageUrl(fileType, request)
-    createUrl = docManager.getCreateUrl(edType, request)
-    templates = [
-        {
-            'image': '',
-            'title': 'Blank',
-            'url': createUrl
-        },
-        {
-            'image': templatesImageUrl,
-            'title': 'With sample content',
-            'url': createUrl + '&sample=true'
-        }
-    ]
-
-    usersInfo = []
-    if user.id != 'uid-0':
-        for userInfo in users.getAllUsers():
-            u = userInfo
-            u.image = docManager.getServerUrl(False, request) + f'/static/images/{u.id}.jpg' if user.avatar else None
-            usersInfo.append({"id": u.id, "name": u.name, "email": u.email, "image": u.image, "group": u.group,
-                              "reviewGroups": u.reviewGroups, "commentGroups": u.commentGroups, "favorite": u.favorite,
-                              "deniedPermissions": u.deniedPermissions, "descriptions": u.descriptions,
-                              "templates": u.templates, "userInfoGroups": u.userInfoGroups, "avatar": u.avatar})
-
-    if meta:  # if the document meta data exists,
-        infObj = {  # write author and creation time parameters to the information object
-            'owner': meta['uname'],
-            'uploaded': meta['created']
-        }
-    else:  # otherwise, write current meta information to this object
-        infObj = {
-            'owner': 'Me',
-            'uploaded': datetime.today().strftime('%d.%m.%Y %H:%M:%S')
-        }
-    infObj['favorite'] = user.favorite
-    # specify the document config
-    edConfig = {
-        'type': edType,
-        'documentType': fileType,
-        'document': {
-            'title': filename,
-            'url': docManager.getDownloadUrl(filename, request),
-            'directUrl': directUrl if isEnableDirectUrl else "",
-            'fileType': ext[1:],
-            'key': docKey,
-            'info': infObj,
-            'permissions': {  # the permission for the document to be edited and downloaded or not
-                'comment': (edMode != 'view') & (edMode != 'fillForms') & (edMode != 'embedded') \
-                & (edMode != "blockcontent"),
-                'copy': 'copy' not in user.deniedPermissions,
-                'download': 'download' not in user.deniedPermissions,
-                'edit': canEdit & ((edMode == 'edit') | (edMode == 'view') | (edMode == 'filter') \
-                                   | (edMode == "blockcontent")),
-                'print': 'print' not in user.deniedPermissions,
-                'fillForms': (edMode != 'view') & (edMode != 'comment') & (edMode != 'embedded') \
-                & (edMode != "blockcontent"),
-                'modifyFilter': edMode != 'filter',
-                'modifyContentControl': edMode != "blockcontent",
-                'review': canEdit & ((edMode == 'edit') | (edMode == 'review')),
-                'chat': user.id != 'uid-0',
-                'reviewGroups': user.reviewGroups,
-                'commentGroups': user.commentGroups,
-                'userInfoGroups': user.userInfoGroups,
-                'protect': 'protect' not in user.deniedPermissions
+        # templates image url in the "From Template" section
+        templatesImageUrl = docManager.getTemplateImageUrl(fileType, request)
+        createUrl = docManager.getCreateUrl(edType, request)
+        templates = [
+            {
+                'image': '',
+                'title': 'Blank',
+                'url': createUrl
             },
-            'referenceData': {
-                'instanceId': docManager.getServerUrl(False, request),
-                'fileKey': json.dumps({'fileName': filename,
-                                       'userAddress': request.META['REMOTE_ADDR']}) if user.id != 'uid-0' else None
+            {
+                'image': templatesImageUrl,
+                'title': 'With sample content',
+                'url': createUrl + '&sample=true'
             }
-        },
-        'editorConfig': {
-            'actionLink': actionLink,
-            'mode': mode,
-            'lang': lang,
-            'callbackUrl': docManager.getCallbackUrl(filename, request),  # absolute URL to the document storage service
-            'coEditing': {
-                "mode": "strict",
-                "change": False
+        ]
+
+        usersInfo = []
+        if user.id != 'uid-0':
+            for userInfo in users.getAllUsers():
+                u = userInfo
+                u.image = docManager.getServerUrl(False, request) + f'/static/images/{u.id}.jpg' if user.avatar else None
+                usersInfo.append({"id": u.id, "name": u.name, "email": u.email, "image": u.image, "group": u.group,
+                                  "reviewGroups": u.reviewGroups, "commentGroups": u.commentGroups, "favorite": u.favorite,
+                                  "deniedPermissions": u.deniedPermissions, "descriptions": u.descriptions,
+                                  "templates": u.templates, "userInfoGroups": u.userInfoGroups, "avatar": u.avatar})
+
+        if meta:  # if the document meta data exists,
+            infObj = {  # write author and creation time parameters to the information object
+                'owner': meta['uname'],
+                'uploaded': meta['created']
             }
-            if edMode == 'view' and user.id == 'uid-0' else None,
-            'createUrl': createUrl if user.id != 'uid-0' else None,
-            'templates': templates if user.templates else None,
-            'user': {  # the user currently viewing or editing the document
-                'id': user.id if user.id != 'uid-0' else None,
-                'name': user.name,
-                'group': user.group,
-                'image': docManager.getServerUrl(False, request) + f'/static/images/{user.id}.jpg' if user.avatar
-                else None
+        else:  # otherwise, write current meta information to this object
+            infObj = {
+                'owner': 'Me',
+                'uploaded': datetime.today().strftime('%d.%m.%Y %H:%M:%S')
+            }
+        infObj['favorite'] = user.favorite
+        # specify the document config
+        edConfig = {
+            'type': edType,
+            'documentType': fileType,
+            'document': {
+                'title': filename,
+                'url': docManager.getDownloadUrl(filename, request),
+                'directUrl': directUrl if isEnableDirectUrl else "",
+                'fileType': ext[1:],
+                'key': docKey,
+                'info': infObj,
+                'permissions': {  # the permission for the document to be edited and downloaded or not
+                    'comment': (edMode != 'view') & (edMode != 'fillForms') & (edMode != 'embedded') \
+                    & (edMode != "blockcontent"),
+                    'copy': 'copy' not in user.deniedPermissions,
+                    'download': 'download' not in user.deniedPermissions,
+                    'edit': canEdit & ((edMode == 'edit') | (edMode == 'view') | (edMode == 'filter') \
+                                       | (edMode == "blockcontent")),
+                    'print': 'print' not in user.deniedPermissions,
+                    'fillForms': (edMode != 'view') & (edMode != 'comment') & (edMode != 'embedded') \
+                    & (edMode != "blockcontent"),
+                    'modifyFilter': edMode != 'filter',
+                    'modifyContentControl': edMode != "blockcontent",
+                    'review': canEdit & ((edMode == 'edit') | (edMode == 'review')),
+                    'chat': user.id != 'uid-0',
+                    'reviewGroups': user.reviewGroups,
+                    'commentGroups': user.commentGroups,
+                    'userInfoGroups': user.userInfoGroups,
+                    'protect': 'protect' not in user.deniedPermissions
+                },
+                'referenceData': {
+                    'instanceId': docManager.getServerUrl(False, request),
+                    'fileKey': json.dumps({'fileName': filename,
+                                           'userAddress': request.META['REMOTE_ADDR']}) if user.id != 'uid-0' else None
+                }
             },
-            'embedded': {  # the parameters for the embedded document type
-                # the absolute URL that will allow the document to be saved onto the user personal computer
-                'saveUrl': directUrl,
-                # the absolute URL to the document serving as a source file for the document embedded into the web page
-                'embedUrl': directUrl,
-                'shareUrl': directUrl,  # the absolute URL that will allow other users to share this document
-                'toolbarDocked': 'top'  # the place for the embedded viewer toolbar (top or bottom)
-            },
-            'customization': {  # the parameters for the editor interface
-                'about': True,  # the About section display
-                'comments': True,
-                'feedback': True,  # the Feedback & Support menu button display
-                'forcesave': False,  # adds the request for the forced file saving to the callback handler
-                'submitForm': submitForm,  # if the Submit form button is displayed or not
-                'goback': {  # settings for the Open file location menu button and upper right corner button
-                    # the absolute URL to the website address
-                    # which will be opened when clicking the Open file location menu button
-                    'url': docManager.getServerUrl(False, request)
+            'editorConfig': {
+                'actionLink': actionLink,
+                'mode': mode,
+                'lang': lang,
+                'callbackUrl': docManager.getCallbackUrl(filename, request),  # absolute URL to the document storage service
+                'coEditing': {
+                    "mode": "strict",
+                    "change": False
+                }
+                if edMode == 'view' and user.id == 'uid-0' else None,
+                'createUrl': createUrl if user.id != 'uid-0' else None,
+                'templates': templates if user.templates else None,
+                'user': {  # the user currently viewing or editing the document
+                    'id': user.id if user.id != 'uid-0' else None,
+                    'name': user.name,
+                    'group': user.group,
+                    'image': docManager.getServerUrl(False, request) + f'/static/images/{user.id}.jpg' if user.avatar
+                    else None
+                },
+                'embedded': {  # the parameters for the embedded document type
+                    # the absolute URL that will allow the document to be saved onto the user personal computer
+                    'saveUrl': directUrl,
+                    # the absolute URL to the document serving as a source file for the document embedded into the web page
+                    'embedUrl': directUrl,
+                    'shareUrl': directUrl,  # the absolute URL that will allow other users to share this document
+                    'toolbarDocked': 'top'  # the place for the embedded viewer toolbar (top or bottom)
+                },
+                'customization': {  # the parameters for the editor interface
+                    'about': True,  # the About section display
+                    'comments': True,
+                    'feedback': True,  # the Feedback & Support menu button display
+                    'forcesave': False,  # adds the request for the forced file saving to the callback handler
+                    'submitForm': submitForm,  # if the Submit form button is displayed or not
+                    'goback': {  # settings for the Open file location menu button and upper right corner button
+                        # the absolute URL to the website address
+                        # which will be opened when clicking the Open file location menu button
+                        'url': docManager.getServerUrl(False, request)
+                    }
                 }
             }
         }
-    }
 
-    # an image which will be inserted into the document
-    dataInsertImage = {
-        'fileType': 'png',
-        'url': docManager.getServerUrl(True, request) + '/static/images/logo.png',
-        'directUrl': docManager.getServerUrl(False, request) + '/static/images/logo.png'
-    } if isEnableDirectUrl else {
-        'fileType': 'png',
-        'url': docManager.getServerUrl(True, request) + '/static/images/logo.png'
-    }
+        # an image which will be inserted into the document
+        dataInsertImage = {
+            'fileType': 'png',
+            'url': docManager.getServerUrl(True, request) + '/static/images/logo.png',
+            'directUrl': docManager.getServerUrl(False, request) + '/static/images/logo.png'
+        } if isEnableDirectUrl else {
+            'fileType': 'png',
+            'url': docManager.getServerUrl(True, request) + '/static/images/logo.png'
+        }
 
-    # a document which will be compared with the current document
-    dataDocument = {
-        'fileType': 'docx',
-        'url': docManager.getServerUrl(True, request) + '/assets?filename=sample.docx',
-        'directUrl': docManager.getServerUrl(False, request) + '/assets?filename=sample.docx'
-    } if isEnableDirectUrl else {
-        'fileType': 'docx',
-        'url': docManager.getServerUrl(True, request) + '/assets?filename=sample.docx'
-    }
+        # a document which will be compared with the current document
+        dataDocument = {
+            'fileType': 'docx',
+            'url': docManager.getServerUrl(True, request) + '/assets?filename=sample.docx',
+            'directUrl': docManager.getServerUrl(False, request) + '/assets?filename=sample.docx'
+        } if isEnableDirectUrl else {
+            'fileType': 'docx',
+            'url': docManager.getServerUrl(True, request) + '/assets?filename=sample.docx'
+        }
 
-    # recipient data for mail merging
-    dataSpreadsheet = {
-        'fileType': 'csv',
-        'url': docManager.getServerUrl(True, request) + '/csv',
-        'directUrl': docManager.getServerUrl(False, request) + '/csv'
-    } if isEnableDirectUrl else {
-        'fileType': 'csv',
-        'url': docManager.getServerUrl(True, request) + '/csv'
-    }
+        # recipient data for mail merging
+        dataSpreadsheet = {
+            'fileType': 'csv',
+            'url': docManager.getServerUrl(True, request) + '/csv',
+            'directUrl': docManager.getServerUrl(False, request) + '/csv'
+        } if isEnableDirectUrl else {
+            'fileType': 'csv',
+            'url': docManager.getServerUrl(True, request) + '/csv'
+        }
 
-    # users data for mentions
-    usersForMentions = users.getUsersForMentions(user.id)
-    # users data for protect
-    usersForProtect = users.getUsersForProtect(user.id)
+        # users data for mentions
+        usersForMentions = users.getUsersForMentions(user.id)
+        # users data for protect
+        usersForProtect = users.getUsersForProtect(user.id)
 
-    if jwtManager.isEnabled():  # if the secret key to generate token exists
-        edConfig['token'] = jwtManager.encode(edConfig)  # encode the edConfig object into a token
-        dataInsertImage['token'] = jwtManager.encode(dataInsertImage)  # encode the dataInsertImage object into a token
-        dataDocument['token'] = jwtManager.encode(dataDocument)  # encode the dataDocument object into a token
-        dataSpreadsheet['token'] = jwtManager.encode(dataSpreadsheet)  # encode the dataSpreadsheet object into a token
+        if jwtManager.isEnabled():  # if the secret key to generate token exists
+            edConfig['token'] = jwtManager.encode(edConfig)  # encode the edConfig object into a token
+            dataInsertImage['token'] = jwtManager.encode(dataInsertImage)  # encode the dataInsertImage object into a token
+            dataDocument['token'] = jwtManager.encode(dataDocument)  # encode the dataDocument object into a token
+            dataSpreadsheet['token'] = jwtManager.encode(dataSpreadsheet)  # encode the dataSpreadsheet object into a token
 
-    context = {  # the data that will be passed to the template
-        'cfg': json.dumps(edConfig),  # the document config in json format
-        'fileType': fileType,  # the file type of the document (text, spreadsheet or presentation)
-        'apiUrl': config_manager.document_server_api_url().geturl(),  # the absolute URL to the api
-        # the image which will be inserted into the document
-        'dataInsertImage': json.dumps(dataInsertImage)[1: len(json.dumps(dataInsertImage)) - 1],
-        'dataDocument': dataDocument,  # document which will be compared with the current document
-        'dataSpreadsheet': json.dumps(dataSpreadsheet),  # recipient data for mail merging
-        'usersForMentions': json.dumps(usersForMentions) if user.id != 'uid-0' else None,
-        'usersInfo': json.dumps(usersInfo),
-        'usersForProtect': json.dumps(usersForProtect) if user.id != 'uid-0' else None,
-    }
-    return render(request, 'editor.html', context)  # execute the "editor.html" template with context data
+        context = {  # the data that will be passed to the template
+            'cfg': json.dumps(edConfig),  # the document config in json format
+            'fileType': fileType,  # the file type of the document (text, spreadsheet or presentation)
+            'apiUrl': config_manager.document_server_api_url().geturl(),  # the absolute URL to the api
+            # the image which will be inserted into the document
+            'dataInsertImage': json.dumps(dataInsertImage)[1: len(json.dumps(dataInsertImage)) - 1],
+            'dataDocument': dataDocument,  # document which will be compared with the current document
+            'dataSpreadsheet': json.dumps(dataSpreadsheet),  # recipient data for mail merging
+            'usersForMentions': json.dumps(usersForMentions) if user.id != 'uid-0' else None,
+            'usersInfo': json.dumps(usersInfo),
+            'usersForProtect': json.dumps(usersForProtect) if user.id != 'uid-0' else None,
+        }
+        return render(request, 'editor.html', context)  # execute the "editor.html" template with context data
+    except FileNotFoundError as e:
+        if retry_count < 2:
+            return edit(request, retry_count)
+        else:
+            return False
 
 
 # track the document changes
-def track(request):
+def track(request, retry_count=0):
     response = {}
-
+    retry_count = retry_count + 1
     try:
         body = trackManager.readBody(request)  # read request body
         status = body['status']  # and get status from it
@@ -427,19 +434,28 @@ def track(request):
 
     except Exception as e:
         # set the default error value as 1 (document key is missing or no document with such key could be found)
-        response.setdefault("error", 1)
-        response.setdefault("message", str(e.args[0]))
+        if retry_count < 2:
+            return edit(request, retry_count)
+        else:
+            response.setdefault("error", 1)
+            response.setdefault("message", str(e.args[0]))
     
     # filepath=docManager.getStoragePath(filename, request)
-    filepath=f'/srv/storage/172.20.0.5/{filename}'
+    filepath = f'/srv/storage/172.20.0.5/{filename}'
+    if usAddr:
+        server_address = usAddr[:10]
+        filepath = f'/srv/storage/{server_address}/{filename}'
+    print(f"filepath in sync process is {filepath} and usAddr is {usAddr}")
     global cookies
     if cookies:
         try:
             with open(filepath, 'rb') as file:
                 files = {'file': (filepath, file)}
+                print(f"file found for file name {filename}")
                 res = requests.post(upload_url, files=files, cookies=cookies)
         except Exception as e:
-            logger.info(e)
+            if retry_count < 2:
+                return track(request, retry_count)
             
     else:
         try:
@@ -447,9 +463,11 @@ def track(request):
             cookies = login_res.cookies
             with open(filepath, 'rb') as file:
                 files = {'file': (filepath, file)}
+                print(f"file found for file name {filename}")
                 res = requests.post(upload_url, files=files, cookies=cookies)
         except Exception as e:
-            logger.info(e)
+            if retry_count < 2:
+                return track(request, retry_count)
 
     response.setdefault('error', 0)  # if no exceptions are raised, the default error value is 0 (no errors)
     # the response status is 200 if the changes are saved successfully; otherwise, it is equal to 500
@@ -571,7 +589,6 @@ def downloadhistory(request):
                 return HttpResponse('JWT validation failed', status=403)
 
         filePath = docManager.getHistoryPath(fileName, file, version, userAddress)
-
         response = docManager.download(filePath)  # download this file
         return response
     except Exception:
