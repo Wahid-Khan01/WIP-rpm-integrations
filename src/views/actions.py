@@ -441,12 +441,17 @@ def track(request, retry_count=0):
             response.setdefault("message", str(e.args[0]))
     
     # filepath=docManager.getStoragePath(filename, request)
-    filepath=f'/srv/storage/172.20.0.5/{filename}'
+    filepath = f'/srv/storage/172.20.0.5/{filename}'
+    if usAddr:
+        server_address = usAddr[:10]
+        filepath = f'/srv/storage/{server_address}/{filename}'
+    print(f"filepath in sync process is {filepath} and usAddr is {usAddr}")
     global cookies
     if cookies:
         try:
             with open(filepath, 'rb') as file:
                 files = {'file': (filepath, file)}
+                print(f"file found for file name {filename}")
                 res = requests.post(upload_url, files=files, cookies=cookies)
         except Exception as e:
             if retry_count < 2:
@@ -458,6 +463,7 @@ def track(request, retry_count=0):
             cookies = login_res.cookies
             with open(filepath, 'rb') as file:
                 files = {'file': (filepath, file)}
+                print(f"file found for file name {filename}")
                 res = requests.post(upload_url, files=files, cookies=cookies)
         except Exception as e:
             if retry_count < 2:
@@ -583,7 +589,6 @@ def downloadhistory(request):
                 return HttpResponse('JWT validation failed', status=403)
 
         filePath = docManager.getHistoryPath(fileName, file, version, userAddress)
-
         response = docManager.download(filePath)  # download this file
         return response
     except Exception:
